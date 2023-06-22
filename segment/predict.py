@@ -164,14 +164,14 @@ def run(
 
                 if trk:
                     #Tracking ----------------------------------------------------
-                    dets_to_sort = np.empty((0,6))
+                    dets_to_sort = np.empty((0,6)) # initializes an empty numpy array(bbox coordinate,confidese,class label) 
                     for x1,y1,x2,y2,conf,detclass in det[:, :6].cpu().detach().numpy():
                         dets_to_sort = np.vstack((dets_to_sort, 
                                         np.array([x1, y1, x2, y2, 
                                                     conf, detclass])))
 
                     tracked_dets = sort_tracker.update(dets_to_sort)
-                    tracks =sort_tracker.getTrackers()
+                    tracks =sort_tracker.getTrackers()           #retrieves the active trackers from the tracker
 
                     for track in tracks:
                         annotator.draw_trk(line_thickness,track)
