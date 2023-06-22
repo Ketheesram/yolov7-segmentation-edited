@@ -113,7 +113,30 @@ class Annotator:
                             thickness=tf,
                             lineType=cv2.LINE_AA)
 
+    def draw_boxes(self, bbox, identities=None, categories=None, confidences = None, names=None, colors = None):
+        for i, box in enumerate(bbox):
+            x1, y1, x2, y2 = [int(i) for i in box]
+            tl = round(0.002 * (self.im.shape[0] + self.im.shape[1]) / 2) + 1  # line/font thickness
 
+            cat = int(categories[i]) if categories is not None else 0
+            id = int(identities[i]) if identities is not None else 0
+            # conf = confidences[i] if confidences is not None else 0
+
+            
+            
+            
+            cv2.rectangle(self.im, (x1, y1), (x2, y2), colors, tl)
+
+            
+            label = str(id) + ":"+ names[cat] if identities is not None else  f'{names[cat]} {confidences[i]:.2f}'
+            tf = max(tl - 1, 1)  # font thickness
+            t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
+            c2 = x1 + t_size[0], y1 - t_size[1] - 3
+            cv2.rectangle(self.im, (x1, y1), c2, colors, -1, cv2.LINE_AA)  # filled
+            cv2.putText(self.im, label, (x1, y1 - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
+
+
+    
     def draw_trk(self,thickness,centroids):
         [cv2.line(self.im, (int(centroids.centroids[i][0]),int(centroids.centroids[i][1])),
                 (int(centroids.centroids[i+1][0]),int(centroids.centroids[i+1][1])),
