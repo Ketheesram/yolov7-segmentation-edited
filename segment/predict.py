@@ -181,6 +181,7 @@ def run(
                         identities = tracked_dets[:, 8]
                         categories = tracked_dets[:, 4]
                         annotator.draw_id(bbox_xyxy, identities, categories, names)
+                        annotator.draw_boxes(bbox_xyxy, identities,categories, conf,names)
             
                 # Write results
                 for j, (*xyxy, conf, cls) in enumerate(reversed(det[:, :6])):
@@ -192,7 +193,7 @@ def run(
 
                     if save_img or save_crop or view_img:  # Add bbox to image
                         c = int(cls)  # integer class
-                        label = None if hide_labels else (f'{names[c]} {identities} {conf:.2f}' if trk else (names[c] if hide_conf else f'{names[c]} {conf:.2f}'))
+                        label = None if hide_labels else (f'{names[c]} {identities[i]} {conf:.2f}' if trk else (names[c] if hide_conf else f'{names[c]} {conf:.2f}'))
                         annotator.box_label(xyxy, label, color=colors(c, True))
                     if save_crop:
                         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
