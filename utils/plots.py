@@ -82,84 +82,70 @@ class Annotator:
             self.im = im
         self.lw = line_width or max(round(sum(im.shape) / 2 * 0.003), 2)  # line width
 
-    def box_label(self, box, label='', color=(128, 128, 128), txt_color=(255, 255, 255)):
-        # Add one xyxy box to image with label
-        if self.pil or not is_ascii(label):
-            self.draw.rectangle(box, width=self.lw, outline=color)  # box
-            if label:
-                w, h = self.font.getsize(label)  # text width, height
-                outside = box[1] - h >= 0  # label fits outside box
-                self.draw.rectangle(
-                    (box[0], box[1] - h if outside else box[1], box[0] + w + 1,
-                     box[1] + 1 if outside else box[1] + h + 1),
-                    fill=color,
-                )
-                # self.draw.text((box[0], box[1]), label, fill=txt_color, font=self.font, anchor='ls')  # for PIL>8.0
-                self.draw.text((box[0], box[1] - h if outside else box[1]), label, fill=txt_color, font=self.font)
-        else:  # cv2
-            p1, p2 = (int(box[0]), int(box[1])), (int(box[2]), int(box[3]))
-            cv2.rectangle(self.im, p1, p2, color, thickness=self.lw, lineType=cv2.LINE_AA)
-            if label:
-                tf = max(self.lw - 1, 1)  # font thickness
-                w, h = cv2.getTextSize(label, 0, fontScale=self.lw / 3, thickness=tf)[0]  # text width, height
-                outside = p1[1] - h >= 3
-                p2 = p1[0] + w, p1[1] - h - 3 if outside else p1[1] + h + 3
-                cv2.rectangle(self.im, p1, p2, color, -1, cv2.LINE_AA)  # filled
-                cv2.putText(self.im,
-                            label, (p1[0], p1[1] - 2 if outside else p1[1] + h + 2),
-                            0,
-                            self.lw / 3,
-                            txt_color,
-                            thickness=tf,
-                            lineType=cv2.LINE_AA)
-
-    def draw_boxes(self, bbox, identities=None, categories=None, confidences = None, names=None, colors = None):
+    
+    def draw_boxes(self, bbox, identities=None, categories=None, confidences=None, names=None, colors=None):
+        category_colors = {0: (255, 0, 0), 1: (0, 255, 0), 2: (0, 0, 255),3: (0, 255, 255),4: (255, 0, 255),5: (100, 100, 255),6: (10, 150, 255),7: (10, 150, 25)}  # Example category colors
+        
         for i, box in enumerate(bbox):
             x1, y1, x2, y2 = [int(i) for i in box]
             tl = round(0.002 * (self.im.shape[0] + self.im.shape[1]) / 2) + 1  # line/font thickness
 
             cat = int(categories[i]) if categories is not None else 0
             id = int(identities[i]) if identities is not None else 0
-            # conf = confidences[i] if confidences is not None else 0
 
-            
-            
-            
-            cv2.rectangle(self.im, (x1, y1), (x2, y2), colors, tl)
+            # Get the color based on the category
+            color = category_colors.get(cat, (128, 128, 128))
 
-            
+            cv2.rectangle(self.im, (x1, y1), (x2, y2), color, tl)
             label = str(id) + ":"+ names[cat] if identities is not None else  f'{names[cat]} {confidences[i]:.2f}'
             tf = max(tl - 1, 1)  # font thickness
-            t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
+            t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf-2)[0]
             c2 = x1 + t_size[0], y1 - t_size[1] - 3
-            cv2.rectangle(self.im, (x1, y1), c2, colors, -1, cv2.LINE_AA)  # filled
-            cv2.putText(self.im, label, (x1, y1 - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
+            cv2.rectangle(self.im, (x1, y1), c2, color, -1, cv2.LINE_AA)  # filled
+            cv2.putText(
+                self.im,
+                label,
+                (x1, y1 - 2),
+                0,
+                tl / 3,
+                [225, 255, 255],
+                thickness=tf,
+                lineType=cv2.LINE_AA
+            )
+
+
+
+    def draw_trk(self,thickness, centroids):
+        for i in range(len(centroids.centroids) - 1):
+
+            start_point = (int(centroids.centroids[i][0]), int(centroids.centroids[i][1]))
+            end_point = (int(centroids.centroids[i+1][0]), int(centroids.centroids[i+1][1]))
+        
+            # Calculate the angle between the line segment and the x-axis
+            angle = np.arctan2(end_point[1] - start_point[1], end_point[0] - start_point[0])
+            arrow_spacing=15
+            # Calculate the arrowhead points
+            arrow_length = 8
+            arrow_angle = np.pi / 6  # Adjust this angle to change the arrowhead shape
+            # Calculate the offset for the end point of the current arrow
+            offset = arrow_spacing * np.array([np.cos(angle), np.sin(angle)])
+            offset_start = end_point - offset
+            offset_end = end_point + offset
+            arrow_points = [
+                (end_point[0] - int(arrow_length * np.cos(angle - arrow_angle)),
+                 end_point[1] - int(arrow_length * np.sin(angle - arrow_angle))),
+                end_point,
+                (end_point[0] - int(arrow_length * np.cos(angle + arrow_angle)),
+                 end_point[1] - int(arrow_length * np.sin(angle + arrow_angle)))
+            ]
+        
+            # Draw the arrow line and arrowhead
+            cv2.line(self.im, start_point, end_point, (255, 144, 30), thickness=thickness)
+            cv2.drawContours(self.im, [np.array(arrow_points)], 0, (255, 144, 30), thickness=cv2.FILLED)
+    
 
 
     
-    def draw_trk(self,thickness,centroids):
-        [cv2.line(self.im, (int(centroids.centroids[i][0]),int(centroids.centroids[i][1])),
-                (int(centroids.centroids[i+1][0]),int(centroids.centroids[i+1][1])),
-                (255,144,30), thickness=thickness) for i,_ in  enumerate(centroids.centroids)
-                if i < len(centroids.centroids)-1 ]
-
-
-    def draw_id(self, bbox, identities=None, categories=None, names=None, offset=(0, 0)):
-        for i, box in enumerate(bbox):
-            x1, y1, x2, y2 = [int(i) for i in box]
-            x1 += offset[0]
-            x2 += offset[0]
-            y1 += offset[1]
-            y2 += offset[1]
-            cat = int(categories[i]) if categories is not None else 0
-            id = int(identities[i]) if identities is not None else 0
-            data = (int((box[0]+box[2])/2),(int((box[1]+box[3])/2)))
-            label = str(id)
-            (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)
-            cv2.rectangle(self.im, (x1, y1 - 20), (x1 + w, y1), (255,144,30), -1)
-            cv2.putText(self.im, label, (x1, y1 - 5),cv2.FONT_HERSHEY_SIMPLEX, 0.6, [255, 255, 255], 1)
-            cv2.circle(self.im, data, 4, (255,0,255),-1)
-
 
     def rectangle(self, xy, fill=None, outline=None, width=1):
         # Add rectangle to image (PIL-only)
