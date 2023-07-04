@@ -180,7 +180,7 @@ def run(
                         bbox_xyxy = tracked_dets[:,:4]
                         identities = tracked_dets[:, 8]
                         categories = tracked_dets[:, 4]
-                        annotator.draw_id(bbox_xyxy, identities, categories, names)
+                        #annotator.draw_id(bbox_xyxy, identities, categories, names)
                         annotator.draw_boxes(bbox_xyxy, identities,categories, conf,names)
             
                 # Write results
