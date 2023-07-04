@@ -123,7 +123,7 @@ class Annotator:
         
             # Calculate the angle between the line segment and the x-axis
             angle = np.arctan2(end_point[1] - start_point[1], end_point[0] - start_point[0])
-            arrow_spacing=15
+            arrow_spacing=200
             # Calculate the arrowhead points
             arrow_length = 8
             arrow_angle = np.pi / 6  # Adjust this angle to change the arrowhead shape
