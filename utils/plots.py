@@ -84,7 +84,7 @@ class Annotator:
 
     
     def draw_boxes(self, bbox, identities=None, categories=None, confidences=None, names=None, colors=None):
-        category_colors = {0: (255, 0, 0), 1: (0, 255, 0), 2: (0, 0, 255),3: (0, 255, 255),4: (255, 0, 255),5: (100, 100, 255),6: (10, 150, 255),7: (10, 150, 25)}  # Example category colors
+        category_colors = {0: (255, 0, 0), 1: (0, 255, 0), 2: (0, 0, 255),16: (153,50,153),18: (255,102,204),49: (255,255,102),44: (51,204,204),68: (0,153,51),79: (200,18,150),73: (50,153,11)}  # Example category colors
         
         for i, box in enumerate(bbox):
             x1, y1, x2, y2 = [int(i) for i in box]
