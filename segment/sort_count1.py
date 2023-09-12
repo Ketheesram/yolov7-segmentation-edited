@@ -46,7 +46,7 @@ import glob
 import time
 import argparse
 from filterpy.kalman import KalmanFilter
-
+from filterpy.kalman import ExtendedKalmanFilter
 np.random.seed(0)
 
 def linear_assignment(cost_matrix):
@@ -101,48 +101,53 @@ def convert_x_to_bbox(x, score=None):
     else:
         return np.array([x[0]-w/2.,x[1]-h/2.,x[0]+w/2.,x[1]+h/2.,score]).reshape((1,5))
 
-class KalmanBoxTracker(object):
+
+
+class ExtendedKalmanBoxTracker(object):
     """
     This class represents the internal state of individual tracked objects observed as bbox.
     """
     count = 0
+
     def __init__(self, bbox):
         """
-        Initialize a tracker using initial bounding box
-        
+        Initialize a tracker using an initial bounding box
+
         Parameter 'bbox' must have 'detected class' int number at the -1 position.
         """
-        self.kf = KalmanFilter(dim_x=7, dim_z=4)
-        self.kf.F = np.array([[1,0,0,0,1,0,0],[0,1,0,0,0,1,0],[0,0,1,0,0,0,1],[0,0,0,1,0,0,0],[0,0,0,0,1,0,0],[0,0,0,0,0,1,0],[0,0,0,0,0,0,1]])
-        self.kf.H = np.array([[1,0,0,0,0,0,0],[0,1,0,0,0,0,0],[0,0,1,0,0,0,0],[0,0,0,1,0,0,0]])
+        self.ekf = ExtendedKalmanFilter(dim_x=7, dim_z=4)
+        self.ekf.F = np.array([[1, 0, 0, 0, 1, 0, 0],
+                               [0, 1, 0, 0, 0, 1, 0],
+                               [0, 0, 1, 0, 0, 0, 1],
+                               [0, 0, 0, 1, 0, 0, 0],
+                               [0, 0, 0, 0, 1, 0, 0],
+                               [0, 0, 0, 0, 0, 1, 0],
+                               [0, 0, 0, 0, 0, 0, 1]])
+        self.ekf.R[2:, 2:] *= 10.  # R: Covariance matrix of measurement noise (set to high for noisy inputs -> more 'inertia' of boxes')
+        self.ekf.P[4:, 4:] *= 1000.  # give high uncertainty to the unobservable initial velocities
+        self.ekf.P *= 10.
+        self.ekf.Q[-1, -1] *= 0.5  # Q: Covariance matrix of process noise (set to high for erratically moving things)
+        self.ekf.Q[4:, 4:] *= 0.5
 
-        self.kf.R[2:,2:] *= 10. # R: Covariance matrix of measurement noise (set to high for noisy inputs -> more 'inertia' of boxes')
-        self.kf.P[4:,4:] *= 1000. #give high uncertainty to the unobservable initial velocities
-        self.kf.P *= 10.
-        self.kf.Q[-1,-1] *= 0.5 # Q: Covariance matrix of process noise (set to high for erratically moving things)
-        self.kf.Q[4:,4:] *= 0.5
-
-        self.kf.x[:4] = convert_bbox_to_z(bbox) # STATE VECTOR
+        self.ekf.x[:4] = convert_bbox_to_z(bbox)  # STATE VECTOR
         self.time_since_update = 0
-        self.id = KalmanBoxTracker.count
-        KalmanBoxTracker.count += 1
+        self.id = ExtendedKalmanBoxTracker.count
+        ExtendedKalmanBoxTracker.count += 1
         self.history = []
         self.hits = 0
         self.hit_streak = 0
         self.age = 0
-        
-        #keep yolov5 detected class information
+
+        # keep yolov5 detected class information
         self.detclass = bbox[5]
-        self.centroids =[]
-        (cX,cY) =self.calculate_centroid(bbox[0:4])
+        self.centroids = []
+        (cX, cY) = self.calculate_centroid(bbox[0:4])
         self.centroids.append((cX, cY))
 
-    def calculate_centroid(self,bbox):
+    def calculate_centroid(self, bbox):
         cX = int((bbox[0] + bbox[2]) / 2.0)
         cY = int((bbox[1] + bbox[3]) / 2.0)
-        return (cX,cY)
-
-
+        return (cX, cY)
 
     def update(self, bbox):
         """
@@ -152,92 +157,39 @@ class KalmanBoxTracker(object):
         self.history = []
         self.hits += 1
         self.hit_streak += 1
-        self.kf.update(convert_bbox_to_z(bbox))
+        self.ekf.update(convert_bbox_to_z(bbox))
         self.detclass = bbox[5]
         (cX, cY) = self.calculate_centroid(bbox[0:4])
-        self.centroids[-1]= (cX, cY)
+        self.centroids[-1] = (cX, cY)
 
     def predict(self):
         """
         Advances the state vector and returns the predicted bounding box estimate
         """
-        if((self.kf.x[6]+self.kf.x[2])<=0):
-            self.kf.x[6] *= 0.0
-        self.kf.predict()
+        if (self.ekf.x[6] + self.ekf.x[2]) <= 0:
+            self.ekf.x[6] *= 0.0
+        self.ekf.predict()
         self.age += 1
-        if(self.time_since_update>0):
+        if (self.time_since_update > 0):
             self.hit_streak = 0
         self.time_since_update += 1
-        self.history.append(convert_x_to_bbox(self.kf.x))
-        bbox=self.history[-1][0]
+        self.history.append(convert_x_to_bbox(self.ekf.x))
+        bbox = self.history[-1][0]
         (cX, cY) = self.calculate_centroid(bbox[0:4])
-        self.centroids.append( (cX, cY))
+        self.centroids.append((cX, cY))
         return self.history[-1]
-    
+
     def get_state(self):
         """
         Returns the current bounding box estimate
-        # test
-        arr1 = np.array([[1,2,3,4]])
-        arr2 = np.array([0])
-        arr3 = np.expand_dims(arr2, 0)
-        np.concatenate((arr1,arr3), axis=1)
         """
         arr_detclass = np.expand_dims(np.array([self.detclass]), 0)
-        
-        arr_u_dot = np.expand_dims(self.kf.x[4],0)
-        arr_v_dot = np.expand_dims(self.kf.x[5],0)
-        arr_s_dot = np.expand_dims(self.kf.x[6],0)
-        
-        return np.concatenate((convert_x_to_bbox(self.kf.x), arr_detclass, arr_u_dot, arr_v_dot, arr_s_dot), axis=1)
-    
-def associate_detections_to_trackers(detections, trackers, iou_threshold = 0.3):
-    """
-    Assigns detections to tracked object (both represented as bounding boxes)
-    Returns 3 lists of 
-    1. matches,
-    2. unmatched_detections
-    3. unmatched_trackers
-    """
-    if(len(trackers)==0):
-        return np.empty((0,2),dtype=int), np.arange(len(detections)), np.empty((0,5),dtype=int)
-    
-    iou_matrix = iou_batch(detections, trackers)
-    
-    if min(iou_matrix.shape) > 0:
-        a = (iou_matrix > iou_threshold).astype(np.int32)
-        if a.sum(1).max() == 1 and a.sum(0).max() ==1:
-            matched_indices = np.stack(np.where(a), axis=1)
-        else:
-            matched_indices = linear_assignment(-iou_matrix)
-    else:
-        matched_indices = np.empty(shape=(0,2))
-    
-    unmatched_detections = []
-    for d, det in enumerate(detections):
-        if(d not in matched_indices[:,0]):
-            unmatched_detections.append(d)
-    
-    unmatched_trackers = []
-    for t, trk in enumerate(trackers):
-        if(t not in matched_indices[:,1]):
-            unmatched_trackers.append(t)
-    
-    #filter out matched with low IOU
-    matches = []
-    for m in matched_indices:
-        if(iou_matrix[m[0], m[1]]<iou_threshold):
-            unmatched_detections.append(m[0])
-            unmatched_trackers.append(m[1])
-        else:
-            matches.append(m.reshape(1,2))
-    
-    if(len(matches)==0):
-        matches = np.empty((0,2), dtype=int)
-    else:
-        matches = np.concatenate(matches, axis=0)
-        
-    return matches, np.array(unmatched_detections), np.array(unmatched_trackers)
+
+        arr_u_dot = np.expand_dims(self.ekf.x[4], 0)
+        arr_v_dot = np.expand_dims(self.ekf.x[5], 0)
+        arr_s_dot = np.expand_dims(self.ekf.x[6], 0)
+
+        return np.concatenate((convert_x_to_bbox(self.ekf.x), arr_detclass, arr_u_dot, arr_v_dot, arr_s_dot), axis=1)
     
 
 class Sort(object):
